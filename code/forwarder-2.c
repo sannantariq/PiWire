@@ -34,7 +34,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define LISTEN_PORT		8888
+#define LISTEN_PORT		8887
 #define CONNECT_PORT 8888
 #define MAXBUF		2048
 

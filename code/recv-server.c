@@ -67,6 +67,7 @@ int main(int argc, char **argv) {
 		struct sockaddr_in addr = { 0 };
         addr.sin_addr.s_addr = htons(INADDR_ANY);
         addr.sin_port = htons(LISTEN_PORT);
+        printf("Listening on port %d\n", LISTEN_PORT);
         bind(sock, (struct sockaddr *)&addr, sizeof(addr));	
 	} else {
 		printf("Invalid argument %s\n", argv[1]);
