@@ -12,7 +12,8 @@ set size 0.6,0.5
 set output "Raspberry Pi-dataTransfer.eps"
 set yrange [:150]
 plot 	"delay_data.dat" using 1:2 title col with linespoints, \
- 	"delay_data.dat" using 1:3 title col with linespoints
+ 	"delay_data.dat" using 1:3 title col with linespoints, \
+ 	"delay_data.dat" using 1:4 title col with linespoints
 set yrange [:10000]
 set logscale y
 set output "Raspberry Pi-dataTransfer_logscale.eps"
