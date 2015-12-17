@@ -77,6 +77,8 @@ int main(int argc, char **argv) {
         addr.sin_family = AF_INET;
         addr.sin_port = htons(SERVER_PORT);
         inet_pton(AF_INET, argv[3], &addr.sin_addr);
+
+        printf("Connecting to %s on port %d\n", argv[3], SERVER_PORT);
 		
 		status = connect(serverFD, (struct sockaddr *)&addr, sizeof(addr));
 		while (status < 0){
@@ -114,7 +116,7 @@ int main(int argc, char **argv) {
  	 *		- Whether a checksum is included
 	 */
 	sprintf(buf, "%10i %10i %5i", chunkSize, size, errorCheck);
-	printf("buf_length = %d\n", strlen(buf));
+	printf("buf_length = %d\n", (int)strlen(buf));
     write(serverFD, buf, strlen(buf));
 
 

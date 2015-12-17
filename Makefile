@@ -5,6 +5,7 @@ all: code/recv-server.c code/transfer-client.c
 	gcc -o bin/transfer code/transfer-client.c -lbluetooth
 	gcc -o bin/forwd code/forwarder.c -lbluetooth
 	gcc -o bin/bt_forwd code/bt_forwarder.c -lbluetooth
+	gcc -o bin/forwd-2 code/forwarder-2.c -lbluetooth
 
 server: code/recv-server.c
 	rm -rf tmp
