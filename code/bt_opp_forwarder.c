@@ -1,8 +1,8 @@
 #include "common.h"
+#include <bluetooth/hci.h>
+#include <bluetooth/hci_lib.h>
 
 
-#define FORWARDER_LISTEN 8888
-#define LISTEN_PORT 8888
 
 int receive_from_prev(int clientFD, char *filename, int *cSize);
 int find_next();
@@ -20,34 +20,16 @@ int open_listen_socket() {
 	/* 
 	 * starting the socket with TCP	
 	 */
-	sock = socket(AF_INET, SOCK_STREAM, 0);
+	sock = socket(AF_BLUETOOTH, SOCK_STREAM, BTPROTO_RFCOMM);
 
 	/*
 	 * bind socket to port 8888 of the first available
 	 * network interface
 	 */
-	struct sockaddr_in addr = { 0 };
-	addr.sin_addr.s_addr = htons(INADDR_ANY);
-	addr.sin_port = htons(LISTEN_PORT);
-	bind(sock, (struct sockaddr *)&addr, sizeof(addr));
-	return sock;
-}
-
-int open_listen_socket_f() {
-	int sock;
-
-	/* 
-	 * starting the socket with TCP	
-	 */
-	sock = socket(AF_INET, SOCK_STREAM, 0);
-
-	/*
-	 * bind socket to port 8888 of the first available
-	 * network interface
-	 */
-	struct sockaddr_in addr = { 0 };
-	addr.sin_addr.s_addr = htons(INADDR_ANY);
-	addr.sin_port = htons(FORWARDER_LISTEN);
+	struct sockaddr_rc addr = { 0 };
+	addr.rc_family = AF_BLUETOOTH;
+	addr.rc_channel = (uint8_t) 1;
+	addr.rc_bdaddr = *BDADDR_ANY;
 	bind(sock, (struct sockaddr *)&addr, sizeof(addr));
 	return sock;
 }
@@ -79,7 +61,7 @@ int main(int argc, char **argv) {
     		printf("Usage: %s <log file name> 1 <filename> <server address> <chunk size>\n", argv[0]);
 	        return -1;
     	}
-    	system("python code/beacon.py &");
+
 
     	chunkSize = atoi(argv[5]);
    		sprintf(filename, "%s", argv[3]);
@@ -88,11 +70,11 @@ int main(int argc, char **argv) {
    			printf("Could not find the next node in the Network\n");
    			return -1;
    		}
-   		int serverFD = connect_to_next_f(argv[4]);
+
+   		int serverFD = connect_to_next(argv[4]);
    		int sent = send_to_next(serverFD, chunkSize, filename);
    		int dc = disconnect_from_next(serverFD);
    		printf("Sender operation complete\n");
-   		system("killall python");
    		return 0;
     }
 
@@ -101,9 +83,10 @@ int main(int argc, char **argv) {
     		printf("Usage: %s <log file name> 2 <server address>\n", argv[0]);
 	        return -1;
     	}
-    	system("python code/beacon.py &");
 
-    	int listen_sock = open_listen_socket_f();
+    	system("hciconfig hci0 piscan");
+
+    	int listen_sock = open_listen_socket();
 
 			/*
 			 * put socket into listening mode - THIS IS BLOCKING
@@ -112,7 +95,7 @@ int main(int argc, char **argv) {
 
     	while (1) {
 
-			
+			// system("./code/discovery_on.sh");
 			printf("Listening...\n");
 			listen(listen_sock, 5);
 
@@ -146,9 +129,8 @@ int main(int argc, char **argv) {
 			printf("Usage: %s <log file name> 3\n", argv[0]);
 	        return -1;
 		}
-		system("python code/beacon.py &");
-
-    	int listen_sock = open_listen_socket();
+			system("hciconfig hci0 piscan");
+		    	int listen_sock = open_listen_socket();
 
 			/*
 			 * put socket into listening mode - THIS IS BLOCKING
@@ -157,7 +139,7 @@ int main(int argc, char **argv) {
 
     	while (1) {
 
-			
+			// system("./code/discovery_on.sh");
 			printf("Listening...\n");
 			listen(listen_sock, 5);
 
@@ -223,7 +205,7 @@ int receive_from_prev(int clientFD, char *filename, int *cSize) {
 		}
 
 		size += readBytes;
-		// printf("size : %d, readbytes: %d\n", size, readBytes);
+		//printf("size : %d, readbytes: %d\n", size, readBytes);
         status = fwrite(buf, sizeof(char), readBytes, ofile);
         if (status < 0) perror ("Error writing:");
 	}
@@ -241,6 +223,41 @@ int receive_from_prev(int clientFD, char *filename, int *cSize) {
     return 0;
 }
 
+int scan(int len, char *find_addr) {
+    inquiry_info *ii = NULL;
+    int max_rsp, num_rsp;
+    int dev_id, sock, flags;
+    int i;
+    char addr[19] = { 0 };
+    char name[248] = { 0 };
+	flags = IREQ_CACHE_FLUSH;
+    dev_id = hci_get_route(NULL);
+    sock = hci_open_dev( dev_id );
+    if (dev_id < 0 || sock < 0) {
+        perror("opening socket");
+        exit(1);
+    }
+
+    max_rsp = 255;
+    flags = IREQ_CACHE_FLUSH;
+    ii = (inquiry_info*)malloc(max_rsp * sizeof(inquiry_info));
+    
+    num_rsp = hci_inquiry(dev_id, len, max_rsp, NULL, &ii, flags);
+    if( num_rsp < 0 ) perror("hci_inquiry");
+
+    for (i = 0; i < num_rsp; i++) {
+        ba2str(&(ii+i)->bdaddr, addr);
+        printf("%s == %s\n", addr, find_addr);
+        if (!strcmp(find_addr, addr)){
+        	return 1;
+        }
+    }
+
+    free( ii );
+    close( sock );
+    return 0;
+}
+
 int find_next(char *address) {
 
 	struct timeval startTime, endTime;
@@ -251,7 +268,7 @@ int find_next(char *address) {
 	log = fopen(logfile, "a");
 	gettimeofday(&startTime, NULL);
 	char cmd[100] = {0};
-	sprintf(cmd, "./code/scan_wifi.py %s", address);
+	sprintf(cmd, "./code/bt_find.py %s", address);
 	system(cmd);
 
 
@@ -264,37 +281,36 @@ int find_next(char *address) {
 	return 0;
 }
 
-int connect_to_next_f(char *address) {
-	int serverFD, status;
-	
-	struct timeval startTime, endTime;
-	double delay;
-	FILE *log;
-	
-	serverFD = socket(AF_INET, SOCK_STREAM, 0);
-	struct sockaddr_in addr = { 0 };
-	addr.sin_family = AF_INET;
-	addr.sin_port = htons(FORWARDER_LISTEN);
-	inet_pton(AF_INET, address, &addr.sin_addr);
-	
-	log = fopen(logfile, "a");
-	gettimeofday(&startTime, NULL);
+// int find_next(char *addr)
+// {
+// 	struct timeval startTime, endTime;
+// 	double delay;
+// 	FILE *log;
+// 	int i;
 
-	status = connect(serverFD, (struct sockaddr *)&addr, sizeof(addr));
-	while (status < 0) {
-		perror("Connection failure, retrying in 1 sec..");
-		sleep(1);
-		serverFD = socket(AF_INET, SOCK_STREAM, 0);
-		status = connect(serverFD, (struct sockaddr *)&addr, sizeof(addr));
-	}
-	
-	gettimeofday(&endTime, NULL);
-    delay = ((endTime.tv_sec * 1000000) + (endTime.tv_usec)) - ((startTime.tv_sec * 1000000) + (startTime.tv_usec));
-    fprintf(log, "Connect Delay : %f\n", delay);
-	fclose(log);
-	
-	return serverFD;
-}
+// 	log = fopen(logfile, "a");
+// 	gettimeofday(&startTime, NULL);
+
+// 	for (i = 2; i < 9; i++) {
+// 		if (scan(i, addr)) {
+// 			gettimeofday(&endTime, NULL);
+// 		    delay = ((endTime.tv_sec * 1000000) + (endTime.tv_usec)) - ((startTime.tv_sec * 1000000) + (startTime.tv_usec));
+// 		    fprintf(log, "Scan Delay : %f\n", delay);
+// 			fclose(log);
+// 			return 0;
+// 		}
+// 	}
+
+// 	while (1) {
+// 		if (scan(i, addr)) {
+// 			gettimeofday(&endTime, NULL);
+// 		    delay = ((endTime.tv_sec * 1000000) + (endTime.tv_usec)) - ((startTime.tv_sec * 1000000) + (startTime.tv_usec));
+// 		    fprintf(log, "Scan Delay : %f\n", delay);
+// 			fclose(log);
+// 			return 0;
+// 		}
+// 	}
+// }
 
 int connect_to_next(char *address) {
 	int serverFD, status;
@@ -302,11 +318,11 @@ int connect_to_next(char *address) {
 	double delay;
 	FILE *log;
 	
-	serverFD = socket(AF_INET, SOCK_STREAM, 0);
-	struct sockaddr_in addr = { 0 };
-	addr.sin_family = AF_INET;
-	addr.sin_port = htons(LISTEN_PORT);
-	inet_pton(AF_INET, address, &addr.sin_addr);
+	serverFD = socket(AF_BLUETOOTH, SOCK_STREAM, BTPROTO_RFCOMM);
+	struct sockaddr_rc addr = { 0 };
+	addr.rc_family = AF_BLUETOOTH;
+	addr.rc_channel = (uint8_t) 1;
+	str2ba(address, &addr.rc_bdaddr);
 
 	log = fopen(logfile, "a");
 	gettimeofday(&startTime, NULL);
@@ -315,7 +331,7 @@ int connect_to_next(char *address) {
 	while (status < 0) {
 		perror("Connection failure, retrying in 1 sec..");
 		sleep(1);
-		serverFD = socket(AF_INET, SOCK_STREAM, 0);
+		serverFD = socket(AF_BLUETOOTH, SOCK_STREAM, BTPROTO_RFCOMM);
 		status = connect(serverFD, (struct sockaddr *)&addr, sizeof(addr));
 	}
 
